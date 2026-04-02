@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>WebRTC Voice Bot Client</title>
+</head>
+
+<body>
+    <h2>🎧 WebRTC Voice Bot</h2>
+
+    <button onclick="start()">Start Talking</button>
+    <button onclick="stop()">Stop</button>
+
+    <script>
+        const ws = new WebSocket("ws://localhost:8080");
+
+        let pc;
+        let localStream;
+
+        function createPeerConnection() {
+            pc = new RTCPeerConnection({
+                iceServers: [
+                    { urls: "stun:stun.l.google.com:19302" }
+                ]
+            });
+
+            // 🎧 Receive bot audio
+            pc.ontrack = (event) => {
+                console.log("Received bot audio");
+
+                const audio = new Audio();
+                audio.srcObject = event.streams[0];
+                audio.play();
+            };
+
+            // 🌐 ICE candidates
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({
+                        target: "bot",
+                        type: "candidate",
+                        candidate: event.candidate
+                    }));
+                }
+            };
+
+            pc.oniceconnectionstatechange = () => {
+                console.log("ICE state:", pc.iceConnectionState);
+            };
+        }
+
+        async function start() {
+            createPeerConnection();
+
+            // 🎤 Get mic
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            // ➕ Send audio to bot
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+            });
+
+            // 📄 Create offer
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            // 📤 Send to bot
+            ws.send(JSON.stringify({
+                target: "bot",
+                type: "offer",
+                offer: offer
+            }));
+        }
+
+        function stop() {
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+
+            console.log("Stopped");
+        }
+
+        // 📩 Handle signaling messages
+        ws.onmessage = async (msg) => {
+            const data = JSON.parse(msg.data);
+
+            if (!pc) {
+                createPeerConnection();
+            }
+
+            if (data.type === "answer") {
+                console.log("Received answer");
+                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            }
+
+            if (data.type === "candidate") {
+                console.log("Received candidate");
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+        };
+
+        ws.onopen = () => {
+            console.log("Connected to signaling server");
+        };
+
+        ws.onerror = (err) => {
+            console.error("WebSocket error:", err);
+        };
+    </script>
+</body>
+
+</html>
