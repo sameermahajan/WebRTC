@@ -1,5 +1,8 @@
+require('dns').setDefaultResultOrder('ipv4first');
 const WebSocket = require("ws");
-const BotPeer = require("./BotPeer");
+// const BotPeer = require("./BotPeer");
+// const BotPeer = require("./BotPeerAssemblyAI");
+const BotPeer = require("./BotPeerOpenAIRealtime");
 
 const wss = new WebSocket.Server({ port: 8080 });
 
